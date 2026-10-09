@@ -1,3 +1,5 @@
+from typing import Any
+
 import requests
 
 
@@ -9,7 +11,7 @@ class OpenStreetMapApi:
     def get_country(self, country_name: str) -> dict:
         """Получает информацию о стране."""
 
-        params = {
+        params: dict[str, Any] = {
             "q": country_name,
             "format": "json",
             "limit": 1,
