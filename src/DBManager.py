@@ -1,6 +1,7 @@
 import os
 
 import psycopg2
+from psycopg2 import sql
 from dotenv import load_dotenv
 
 # нужно при первом запуске, возможно как то оптимизировать
@@ -11,7 +12,9 @@ class DBManager:
     """Класс для работы с базой данных PostgreSQL."""
 
     def __init__(self):
-        """Подключение к базе данных."""
+        """Создаёт БД и таблицы при необходимости, затем подключается к БД."""
+
+        self.create_database()
 
         self.connection = psycopg2.connect(
             database=os.getenv("DB_NAME"),
@@ -20,6 +23,76 @@ class DBManager:
             host=os.getenv("DB_HOST"),
             port=os.getenv("DB_PORT"),
         )
+
+        self.create_tables()
+
+    @staticmethod
+    def create_database():
+        """Создаёт базу данных, если она ещё не существует."""
+
+        database_name = os.getenv("DB_NAME")
+
+        connection = psycopg2.connect(
+            database="postgres",
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT"),
+        )
+
+        try:
+            connection.autocommit = True
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT 1 FROM pg_database WHERE datname = %s;",
+                    (database_name,),
+                )
+
+                if cursor.fetchone() is None:
+                    cursor.execute(
+                        sql.SQL("CREATE DATABASE {}").format(
+                            sql.Identifier(database_name)
+                        )
+                    )
+        finally:
+            connection.close()
+
+    def create_tables(self):
+        """Создаёт таблицы, если они ещё не существуют."""
+
+        query = """
+            CREATE TABLE IF NOT EXISTS countries (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                latitude DOUBLE PRECISION NOT NULL,
+                longitude DOUBLE PRECISION NOT NULL,
+                min_latitude DOUBLE PRECISION NOT NULL,
+                max_latitude DOUBLE PRECISION NOT NULL,
+                min_longitude DOUBLE PRECISION NOT NULL,
+                max_longitude DOUBLE PRECISION NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS aircraft (
+                id SERIAL PRIMARY KEY,
+                icao24 VARCHAR(20) NOT NULL,
+                callsign VARCHAR(20),
+                origin_country VARCHAR(100),
+                longitude DOUBLE PRECISION,
+                latitude DOUBLE PRECISION,
+                altitude DOUBLE PRECISION,
+                velocity DOUBLE PRECISION,
+                true_track DOUBLE PRECISION,
+                vertical_rate DOUBLE PRECISION,
+                on_ground BOOLEAN,
+                country_id INTEGER REFERENCES countries(id)
+            );
+        """
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(query)
+
+        self.connection.commit()
 
     def get_countries_and_aeroplanes_count(self):
         """Возвращает список стран и количество самолётов
